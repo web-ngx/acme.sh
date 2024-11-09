@@ -1248,14 +1248,23 @@ _createcsr() {
   _debug2 csr "$csr"
   _debug2 csrconf "$csrconf"
 
-  printf "[ req_distinguished_name ]\n[ req ]\ndistinguished_name = req_distinguished_name\nreq_extensions = v3_req\n[ v3_req ]" >"$csrconf"
+  printf "[ req ]\n" >"$csrconf"
+  printf "\ndefault_md = sha512" >"$csrconf"
+  printf "\ndistinguished_name = req_distinguished_name" >"$csrconf"
+  printf "\nreq_extensions = v3_req" >"$csrconf"
+  printf "\nprompt = no" >"$csrconf"
+  printf "\n[ req_distinguished_name ]" >>"$csrconf"
+  printf "\n[ v3_req ]" >>"$csrconf"
+  printf "\nbasicConstraints = critical, CA:FALSE" >>"$csrconf"
 
   if [ "$Le_ExtKeyUse" ]; then
     _savedomainconf Le_ExtKeyUse "$Le_ExtKeyUse"
-    printf "\nextendedKeyUsage=$Le_ExtKeyUse\n" >>"$csrconf"
+    printf "\nextendedKeyUsage = $Le_ExtKeyUse" >>"$csrconf"
   else
-    printf "\nextendedKeyUsage=serverAuth,clientAuth\n" >>"$csrconf"
+    printf "\nextendedKeyUsage = critical, serverAuth, clientAuth, timeStamping" >>"$csrconf"
   fi
+
+  printf "\nkeyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment, dataEncipherment, keyAgreement" >>"$csrconf"
 
   if [ "$acmeValidationv1" ]; then
     domainlist="$(_idn "$domainlist")"
@@ -1268,31 +1277,36 @@ _createcsr() {
         alt="$(_getIdType "$dl" | _upper_case):$dl"
       fi
     done
-    printf -- "\nsubjectAltName=$alt" >>"$csrconf"
+    printf -- "\nsubjectAltName = $alt" >>"$csrconf"
   elif [ -z "$domainlist" ] || [ "$domainlist" = "$NO_VALUE" ]; then
     #single domain
     _info "Single domain" "$domain"
-    printf -- "\nsubjectAltName=$(_getIdType "$domain" | _upper_case):$(_idn "$domain")" >>"$csrconf"
+    printf -- "\nsubjectAltName = $(_getIdType "$domain" | _upper_case):$(_idn "$domain")" >>"$csrconf"
   else
     domainlist="$(_idn "$domainlist")"
     _debug2 domainlist "$domainlist"
     alt="$(_getIdType "$domain" | _upper_case):$(_idn "$domain")"
     for dl in $(echo "'$domainlist'" | sed "s/,/' '/g"); do
       dl=$(echo "$dl" | tr -d "'")
-      alt="$alt,$(_getIdType "$dl" | _upper_case):$dl"
+      alt="$alt, $(_getIdType "$dl" | _upper_case):$dl"
     done
     #multi
     _info "Multi domain" "$alt"
-    printf -- "\nsubjectAltName=$alt" >>"$csrconf"
+    printf -- "\nsubjectAltName = $alt" >>"$csrconf"
   fi
+
+  printf "\nsubjectKeyIdentifier = critical, hash" >>"$csrconf"
+
   if [ "$Le_OCSP_Staple" = "1" ]; then
     _savedomainconf Le_OCSP_Staple "$Le_OCSP_Staple"
-    printf -- "\nbasicConstraints = CA:FALSE\n1.3.6.1.5.5.7.1.24=DER:30:03:02:01:05" >>"$csrconf"
+    printf -- "\ntlsfeature = critical, status_request" >>"$csrconf"
   fi
 
   if [ "$acmeValidationv1" ]; then
-    printf "\n1.3.6.1.5.5.7.1.31=critical,DER:04:20:${acmeValidationv1}" >>"${csrconf}"
+    printf -- "\n1.3.6.1.5.5.7.1.31 = critical, DER:04:20:${acmeValidationv1}" >>"${csrconf}"
   fi
+
+  printf -- "\n" >>"${csrconf}"
 
   _csr_cn="$(_idn "$domain")"
   _debug2 _csr_cn "$_csr_cn"
